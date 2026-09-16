@@ -4,7 +4,7 @@ This supplementary package accompanies the manuscript:
 
 **A Python-Based Pipeline for Uncertainty-Aware Allometric Model Development: A Case Study of Restored *Rhizophora mucronata* Stands in Gazi Bay, Kenya**
 
-It contains the Python implementation and harmonised demonstration dataset used to reproduce the analytical workflow and principal results reported in the manuscript.
+It contains the Python implementation and harmonised dataset used to reproduce the analytical workflow and principal results reported in the manuscript.
 
 ## Contents
 
@@ -43,7 +43,7 @@ The three demonstration datasets were originally reported in different source st
 
 For analysis, the relevant variables were harmonised to the common schema shown above. The numerical observations used in model fitting were preserved. No trees were added, removed, filtered, or altered during the harmonisation or modelling stages.
 
-This is consistent with the data-integrity principle described in Section 2.2.2 of the manuscript.
+This is consistent with the data-integrity principle adopted for this work and is described in Section 2.2.2 of the manuscript.
 
 ## Candidate model forms
 
