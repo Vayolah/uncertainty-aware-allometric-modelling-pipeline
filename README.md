@@ -128,7 +128,8 @@ See `requirements.txt`.
 
 ## Citation
 
-If this code or dataset is reused, please cite the associated manuscript and the final repository record or DOI once available.
+If this code or dataset is reused, please cite the associated manuscript and the archived repository record available through Zenodo.
+Zenodo DOI: 10.5281/zenodo.22789432
 
 ## Licence
 
