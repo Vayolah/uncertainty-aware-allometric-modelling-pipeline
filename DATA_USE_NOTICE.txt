@@ -1,0 +1,15 @@
+DATA USE AND REDISTRIBUTION NOTICE
+
+Dataset:
+gazi_bay_rhizophora_mucronata_allometry_data.csv
+
+The original source datasets were used with permission from the data owners.
+
+Public redistribution rights were not separately granted. This harmonised file
+is shared solely to support reproducibility of the associated study.
+
+Users should consult the original publications and data owners regarding any
+further reuse or redistribution of the underlying data.
+
+This notice applies to the harmonised dataset only. The Python source code in
+the repository is released separately under the MIT License.
