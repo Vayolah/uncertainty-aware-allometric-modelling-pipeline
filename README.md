@@ -9,7 +9,7 @@ It contains the Python implementation and harmonised demonstration dataset used 
 ## Contents
 
 - `uncertainty_aware_allometric_pipeline.py`  
-  Complete implementation of the baseline OLS fit and the six-step analytical pipeline described in Section 2.1.2 of the manuscript.
+  Complete implementation of the baseline OLS fit and the six-step analytical pipeline described in the manuscript.
 
 - `gazi_bay_rhizophora_mucronata_allometry_data.csv`  
   Harmonised destructive-harvest dataset for restored *Rhizophora mucronata* stands aged 5, 6, and 12 years in Gazi Bay, Kenya, drawn from previously published studies.
@@ -52,7 +52,7 @@ The three demonstration datasets were originally reported in different source st
 
 For analysis, the relevant variables were harmonised to the common schema shown above. The numerical observations used in model fitting were preserved. No trees were added, removed, filtered, or altered during the harmonisation or modelling stages.
 
-This is consistent with the data-integrity principle described in Section 2.2.2 of the manuscript.
+This is consistent with the data-integrity principle described in the manuscript.
 
 ## Candidate model forms
 
