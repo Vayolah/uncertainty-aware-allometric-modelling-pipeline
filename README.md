@@ -2,23 +2,32 @@
 
 This supplementary package accompanies the manuscript:
 
-**A Python-Based Pipeline for Uncertainty-Aware Allometric Model Development: A Case Study of Restored *Rhizophora mucronata* Stands in Gazi Bay, Kenya**
+**An Uncertainty-Aware Pipeline for Forest Biomass Allometric Model Development: Demonstration in Restored Mangrove Forests**
 
-It contains the Python implementation and harmonised dataset used to reproduce the analytical workflow and principal results reported in the manuscript.
+It contains the Python implementation and harmonised demonstration dataset used to reproduce the analytical workflow and principal results reported in the manuscript.
 
 ## Contents
 
 - `uncertainty_aware_allometric_pipeline.py`  
-  Complete implementation of the seven-step analytical pipeline described in Section 2.1.2 of the manuscript.
+  Complete implementation of the baseline OLS fit and the six-step analytical pipeline described in Section 2.1.2 of the manuscript.
 
 - `gazi_bay_rhizophora_mucronata_allometry_data.csv`  
- Previously published destructive harvest harmonised dataset for restored *Rhizophora mucronata* stands aged 5, 6, and 12 years in Gazi Bay, Kenya.
+  Harmonised destructive-harvest dataset for restored *Rhizophora mucronata* stands aged 5, 6, and 12 years in Gazi Bay, Kenya, drawn from previously published studies.
 
 - `requirements.txt`  
   Python package dependencies required to run the pipeline.
 
 - `README.md`  
   Documentation for the supplementary code and data package.
+
+- `LICENSE`  
+  MIT License for the Python source code.
+
+- `DATA_USE_NOTICE.txt`  
+  Terms of use for the harmonised dataset.
+
+- `CITATION.cff`  
+  Citation metadata for this repository.
 
 ## Dataset
 
@@ -39,46 +48,48 @@ The pipeline uses the following harmonised variables:
 
 ## Data harmonisation
 
-The three demonstration datasets were originally reported in different source studies (Kairo, 2001; Tamooh et al., 2009; Kairo et al., 2008).
+The three demonstration datasets were originally reported in different source studies (Kairo, 2001; Tamooh et al., 2009; Kairo et al., 2008). Tree-level raw data for all three cohorts were provided directly by the original authors.
 
 For analysis, the relevant variables were harmonised to the common schema shown above. The numerical observations used in model fitting were preserved. No trees were added, removed, filtered, or altered during the harmonisation or modelling stages.
 
-This is consistent with the data-integrity principle adopted for this work and is described in Section 2.2.2 of the manuscript.
+This is consistent with the data-integrity principle described in Section 2.2.2 of the manuscript.
 
 ## Candidate model forms
 
 Four candidate log-linear model forms are evaluated:
 
-- M1: ln(AGB) = β₀ + β₁ ln(DBH)
-- M2: ln(AGB) = β₀ + β₁ ln(DBH) + β₂ ln(H)
-- M3a: ln(AGB) = β₀ + β₁ ln(DBH²·H)
-- M3b: ln(AGB) = β₀ + β₁ ln(DBH·H)
+- M1: ln(AGB) = beta0 + beta1 * ln(DBH)
+- M2: ln(AGB) = beta0 + beta1 * ln(DBH) + beta2 * ln(H)
+- M3a: ln(AGB) = beta0 + beta1 * ln(DBH^2 * H)
+- M3b: ln(AGB) = beta0 + beta1 * ln(DBH * H)
 
 ## Analytical workflow
 
-For each cohort and candidate model form, the script implements the following seven-step workflow:
+For each cohort, every candidate model form is processed independently through a baseline fit followed by six statistical steps:
 
-1. Ordinary Least Squares (OLS) baseline fitting
-2. Breusch–Pagan heteroscedasticity testing
-3. Conditional estimator selection: OLS retained or Weighted Least Squares (WLS) applied
-4. Non-parametric bootstrap confidence intervals (B = 5,000)
-5. Leave-One-Out Cross-Validation (LOOCV)
-6. Duan smearing correction for log back-transformation
-7. Prediction and confidence interval estimation
+- Baseline: Ordinary Least Squares (OLS) fit of the candidate model form
+- Step 1: Breusch-Pagan heteroscedasticity test
+- Step 2: Conditional estimator selection (OLS retained, or Weighted Least Squares (WLS) applied with weights w_i = 1 / DBH_i^2)
+- Step 3: Non-parametric bootstrap confidence intervals (B = 5,000)
+- Step 4: Leave-One-Out Cross-Validation (LOOCV)
+- Step 5: Duan smearing correction for log back-transformation
+- Step 6: Prediction and confidence interval estimation
 
-Eligible candidate equations are subsequently ranked using five equally weighted criteria:
+For WLS-fitted models, training R2 is computed from unweighted log-scale residuals, so that it is directly comparable with LOOCV-R2 and with OLS-fitted models.
 
-- LOOCV-R² — higher is better
-- ΔR² — lower is better
-- AIC — lower is better
-- biomass-scale RMSE — lower is better
-- bootstrap confidence-interval width for β₁ — lower is better
+After all candidate forms have been processed, M2 is screened for eligibility (excluded if the height coefficient beta2 has p >= 0.05). Eligible candidate equations are then ranked using five equally weighted criteria:
+
+- LOOCV-R2: higher is better
+- Overfitting gap (Delta R2 = training R2 - LOOCV-R2): lower is better
+- AIC: lower is better
+- Biomass-scale RMSE (kg): lower is better
+- Bootstrap confidence-interval width for beta1: lower is better
 
 The pipeline returns a ranked list of eligible candidate equations. Final equation retention is informed by the ranked statistical outputs together with analyst review for biological plausibility.
 
 ## Requirements
 
-Python 3 is required.
+Python 3.12 or later is required (the pipeline was verified with Python 3.13).
 
 Install the required packages with:
 
@@ -90,7 +101,7 @@ The package dependencies are listed in `requirements.txt`.
 
 ## Usage
 
-1. Place `uncertainty_aware_allometric_pipeline.py`, `gazi_bay_rhizophora_mucronata_allometry_data.csv`, and `requirements.txt` in the same directory.
+1. Place `uncertainty_aware_allometric_pipeline.py` and `gazi_bay_rhizophora_mucronata_allometry_data.csv` in the same directory.
 2. Install the dependencies.
 3. Run:
 
@@ -104,21 +115,17 @@ python uncertainty_aware_allometric_pipeline.py
 
 The pipeline produces:
 
-- console output reporting each analytical step for every cohort and candidate model;
-- one diagnostic figure for the top-ranked eligible equation in each cohort;
+- console output reporting the baseline fit and each analytical step for every cohort and candidate model;
+- one nine-panel diagnostic figure for the top-ranked eligible equation in each cohort;
 - `allometric_pipeline_results.xlsx`, containing:
-  - `Summary` — model diagnostics and performance statistics for all candidate models and cohorts;
-  - `Predictions` — fitted values and influence diagnostics for the top-ranked eligible equation in each cohort;
-  - `Prediction Intervals` — 95% confidence and prediction intervals at the mean predictor value;
-- bootstrap confidence intervals;
-- LOOCV statistics;
-- Duan smearing factors;
-- influence diagnostics;
-- composite-ranking results.
+  - `Summary`: model diagnostics and performance statistics for all candidate models and cohorts, including bootstrap confidence intervals, LOOCV statistics, the overfitting gap and Duan smearing factors;
+  - `Predictions`: fitted values and influence diagnostics for the top-ranked eligible equation in each cohort;
+  - `Prediction Intervals`: 95% confidence and prediction intervals at the mean DBH and mean height of each cohort;
+- composite-ranking results, reported in the console output.
 
 ## Verification and reproducibility
 
-The supplied script and dataset were run end-to-end to verify that they reproduce the principal values reported in the manuscript, including the retained model form, β₁, LOOCV-R², ΔR², biomass-scale RMSE, and Duan smearing factor for all three cohorts.
+The supplied script and dataset were run end-to-end to verify that they reproduce the principal values reported in the manuscript, including the retained model form, beta1, LOOCV-R2, the overfitting gap, biomass-scale RMSE, and Duan smearing factor for all three cohorts.
 
 The bootstrap procedure uses a fixed random seed (`42`) to support reproducibility.
 
@@ -128,11 +135,10 @@ See `requirements.txt`.
 
 ## Citation
 
-If this code or dataset is reused, please cite the associated manuscript and the archived repository record available through Zenodo.
-Zenodo DOI: 10.5281/zenodo.22789432
+If this code or dataset is reused, please cite the associated manuscript and this Zenodo record (concept DOI: https://doi.org/10.5281/zenodo.22789431).
 
-## Licence
+## Licence and data use
 
-The Python code in this repository is released under the MIT License.
+The Python code in this repository is released under the MIT License (see `LICENSE`).
 
-The accompanying harmonised dataset is made available under the Creative Commons Attribution 4.0 International (CC BY 4.0) licence.
+The harmonised dataset is not released under an open licence. The original source datasets were used with permission from the data owners, and the harmonised file is shared solely to support reproducibility of the associated study. Users should consult the original publications and data owners regarding any further reuse or redistribution of the underlying data (see `DATA_USE_NOTICE.txt`).

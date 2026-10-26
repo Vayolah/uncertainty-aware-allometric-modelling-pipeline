@@ -2,7 +2,9 @@ cff-version: 1.2.0
 message: "If you use this software or dataset, please cite this repository."
 title: "Uncertainty-Aware Allometric Modelling Pipeline"
 type: software
-version: 1.0.0
+version: 1.1.0
+date-released: "2026-10-26"
+doi: "10.5281/zenodo.22789431"
 authors:
   - family-names: "Kirui"
     given-names: "Viola C."
@@ -25,7 +27,9 @@ keywords:
   - uncertainty
   - Python
 abstract: >-
-  Python implementation of a seven-step uncertainty-aware allometric modelling
-  pipeline, accompanied by a harmonised Gazi Bay Rhizophora mucronata
-  destructive-harvest dataset for demonstrating biomass equation development
-  and uncertainty reporting.
+  Python implementation of an uncertainty-aware allometric modelling pipeline,
+  comprising a baseline OLS fit and six statistical steps, accompanied by a
+  harmonised Gazi Bay Rhizophora mucronata destructive-harvest dataset for
+  demonstrating biomass equation development and uncertainty reporting.
+  The MIT License applies to the code only; the dataset is shared for
+  reproducibility under the terms in DATA_USE_NOTICE.txt.

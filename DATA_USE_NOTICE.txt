@@ -12,4 +12,4 @@ Users should consult the original publications and data owners regarding any
 further reuse or redistribution of the underlying data.
 
 This notice applies to the harmonised dataset only. The Python source code in
-the repository is released separately under the MIT License.
+the repository is released separately under the MIT License (see LICENSE).

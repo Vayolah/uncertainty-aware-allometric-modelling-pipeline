@@ -1,22 +1,24 @@
 """
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
 UNCERTAINTY-AWARE ALLOMETRIC MODELLING PIPELINE
-Gazi Bay Rhizophora mucronata — Age-Specific Biomass Equations
+Gazi Bay Rhizophora mucronata - Age-Specific Biomass Equations
 
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
 
 METHODOLOGY REFERENCE: Integrated Analytical Pipeline
-  Step 1 : Classical OLS — all candidate model forms
-  Step 2 : Breusch-Pagan heteroscedasticity test
-  Step 3 : Weighted Least Squares (conditional on Step 2)
-  Step 4 : Bootstrap resampling (B = 5,000)
-  Step 5 : Leave-One-Out Cross-Validation (LOOCV)
-  Step 6 : Duan smearing factor (back-transformation bias correction)
-  Step 7 : Prediction intervals (95% CI and 95% PI)
+  Baseline : Classical OLS fit of the candidate model form
+  Step 1   : Breusch-Pagan heteroscedasticity test
+  Step 2   : Weighted Least Squares (conditional on Step 1)
+  Step 3   : Bootstrap resampling (B = 5,000)
+  Step 4   : Leave-One-Out Cross-Validation (LOOCV)
+  Step 5   : Duan smearing factor (back-transformation bias correction)
+  Step 6   : Prediction intervals (95% CI and 95% PI)
+  The baseline fit and Steps 1-6 are repeated independently for each
+  candidate model form within each cohort, followed by composite ranking.
 
 DATA INTEGRITY NOTE:
-  The harmonised dataset preserves the numerical observations extracted from
-  the original published datasets. No observations are excluded or altered
+  The harmonised dataset preserves the numerical observations from the
+  original source datasets. No observations are excluded or altered
   during model fitting. Influence diagnostics are reported for interpretation
   only and do not trigger automatic observation removal.
 
@@ -24,7 +26,7 @@ USAGE:
   1. Place your harmonised CSV in the same folder as this script.
   2. Set DATA_FILE below to your CSV's filename.
   3. Run: python uncertainty_aware_allometric_pipeline.py
-  4. Results saved to /outputs/ folder.
+  4. Results saved to the outputs/ folder.
 
 REQUIRED COLUMNS IN CSV:
   - cohort    : integer stand/tree age in years (5, 6, 12)
@@ -33,11 +35,11 @@ REQUIRED COLUMNS IN CSV:
   - agb       : above-ground biomass (kg dry weight)
 
 DEPENDENCIES:
-  pip install pandas numpy scipy statsmodels matplotlib seaborn openpyxl
-═══════════════════════════════════════════════════════════════════════════════
+  pip install -r requirements.txt   (Python 3.12 or later)
+===============================================================================
 """
 
-# ── Imports ───────────────────────────────────────────────────────────────────
+# --- Imports ---
 import os
 import sys
 import warnings
@@ -56,9 +58,9 @@ from itertools import combinations
 
 warnings.filterwarnings('ignore')
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION — edit these to match your file
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# CONFIGURATION - edit these to match your file
+# =============================================================================
 DATA_FILE      = "gazi_bay_rhizophora_mucronata_allometry_data.csv"   # your CSV filename
 OUTPUT_DIR     = "outputs"                    # results folder
 B_BOOTSTRAP    = 5000                         # bootstrap iterations
@@ -66,12 +68,12 @@ ALPHA          = 0.05                         # significance level
 CI_LEVEL       = 0.95                         # confidence/prediction interval
 RANDOM_SEED    = 42                           # reproducibility
 
-# Cohorts to process — set to None to process all, or list e.g. [5, 12]
+# Cohorts to process - set to None to process all, or list e.g. [5, 12]
 COHORTS        = None   # e.g. [5] to run only 5-year cohort
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # COLOUR PALETTE (consistent across all figures)
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 COLOURS = {
     'ols'        : '#1E3A5F',   # dark navy
     'wls'        : '#C0392B',   # deep red
@@ -83,14 +85,14 @@ COLOURS = {
     'grid'       : '#ECF0F1',
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # HELPER UTILITIES
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def make_output_dir():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def sep(char='═', n=72):
+def sep(char='=', n=72):
     return char * n
 
 def section(title):
@@ -99,25 +101,25 @@ def section(title):
     print(sep())
 
 def subsection(title):
-    print(f"\n  {'─'*60}")
+    print(f"\n  {'-'*60}")
     print(f"  {title}")
-    print(f"  {'─'*60}")
+    print(f"  {'-'*60}")
 
 def fmt(val, decimals=4):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return "N/A"
     return f"{val:.{decimals}f}"
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # DATA LOADING AND PREPARATION
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def load_data(filepath):
     """Load and validate the harmonised dataset."""
     section("DATA LOADING AND VALIDATION")
 
     if not os.path.exists(filepath):
-        print(f"\n  ✗ File not found: {filepath}")
+        print(f"\n  ERROR: File not found: {filepath}")
         print(f"  Please place your CSV file in: {os.path.abspath('.')}")
         sys.exit(1)
 
@@ -133,7 +135,7 @@ def load_data(filepath):
     required = ['cohort', 'dbh', 'agb']
     missing = [c for c in required if c not in df.columns]
     if missing:
-        print(f"\n  ✗ Missing required columns: {missing}")
+        print(f"\n  ERROR: Missing required columns: {missing}")
         print(f"  Required columns: {required}")
         sys.exit(1)
 
@@ -154,13 +156,13 @@ def load_data(filepath):
     df = df.dropna(subset=['dbh', 'agb'])
     after = len(df)
     if before != after:
-        print(f"\n  ⚠ Dropped {before-after} rows with missing DBH or AGB")
+        print(f"\n  WARNING: Dropped {before-after} rows with missing DBH or AGB")
 
     # Remove non-positive values (log transformation requires > 0)
     for col in ['dbh', 'agb'] + (['height'] if has_height else []):
         n_nonpos = (df[col] <= 0).sum()
         if n_nonpos > 0:
-            print(f"  ⚠ {n_nonpos} non-positive values in {col} — removed")
+            print(f"  WARNING: {n_nonpos} non-positive values in {col} - removed")
             df = df[df[col] > 0]
 
     # Cohort summary
@@ -168,16 +170,16 @@ def load_data(filepath):
     for cohort, grp in df.groupby('cohort'):
         print(f"    {cohort}-year cohort: n = {len(grp)}")
 
-    print(f"\n  ✓ Data validation complete. {len(df)} records ready.")
+    print(f"\n  OK: Data validation complete. {len(df)} records ready.")
     return df, has_height
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # DESCRIPTIVE STATISTICS
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def descriptive_statistics(df, cohort, has_height):
     """Compute and display descriptive statistics for one cohort."""
-    subsection(f"DESCRIPTIVE STATISTICS — {cohort}-YEAR COHORT")
+    subsection(f"DESCRIPTIVE STATISTICS - {cohort}-YEAR COHORT")
 
     cols = ['dbh', 'agb'] + (['height'] if has_height else [])
     stats_rows = []
@@ -217,9 +219,9 @@ def descriptive_statistics(df, cohort, has_height):
 
     return stats_df
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # MODEL FORMS
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def build_model_matrix(df, model_form, has_height):
     """
@@ -228,14 +230,14 @@ def build_model_matrix(df, model_form, has_height):
     Model forms:
       'dbh'        : ln(AGB) = a + b*ln(DBH)
       'dbh_h'      : ln(AGB) = a + b1*ln(DBH) + b2*ln(H)
-      'dbh2h'      : ln(AGB) = a + b*ln(DBH²·H)
-      'dbhh'       : ln(AGB) = a + b*ln(DBH·H)
+      'dbh2h'      : ln(AGB) = a + b*ln(DBH^2*H)
+      'dbhh'       : ln(AGB) = a + b*ln(DBH*H)
     """
     y = np.log(df['agb'].values)
 
     if model_form == 'dbh':
         X = add_constant(np.log(df['dbh'].values))
-        labels = ['Intercept (β₀)', 'ln(DBH) (β₁)']
+        labels = ['Intercept (beta0)', 'ln(DBH) (beta1)']
 
     elif model_form == 'dbh_h':
         if not has_height:
@@ -244,21 +246,21 @@ def build_model_matrix(df, model_form, has_height):
             np.log(df['dbh'].values),
             np.log(df['height'].values)
         ]))
-        labels = ['Intercept (β₀)', 'ln(DBH) (β₁)', 'ln(H) (β₂)']
+        labels = ['Intercept (beta0)', 'ln(DBH) (beta1)', 'ln(H) (beta2)']
 
     elif model_form == 'dbh2h':
         if not has_height:
             return None, None, None
         composite = np.log(df['dbh'].values**2 * df['height'].values)
         X = add_constant(composite)
-        labels = ['Intercept (β₀)', 'ln(DBH²·H) (β₁)']
+        labels = ['Intercept (beta0)', 'ln(DBH^2*H) (beta1)']
 
     elif model_form == 'dbhh':
         if not has_height:
             return None, None, None
         composite = np.log(df['dbh'].values * df['height'].values)
         X = add_constant(composite)
-        labels = ['Intercept (β₀)', 'ln(DBH·H) (β₁)']
+        labels = ['Intercept (beta0)', 'ln(DBH*H) (beta1)']
 
     else:
         raise ValueError(f"Unknown model form: {model_form}")
@@ -266,15 +268,15 @@ def build_model_matrix(df, model_form, has_height):
     return X, y, labels
 
 MODEL_NAMES = {
-    'dbh'   : 'Model 1 — ln(AGB) = a + b·ln(DBH)',
-    'dbh_h' : 'Model 2 — ln(AGB) = a + b₁·ln(DBH) + b₂·ln(H)',
-    'dbh2h' : 'Model 3a — ln(AGB) = a + b·ln(DBH²·H)',
-    'dbhh'  : 'Model 3b — ln(AGB) = a + b·ln(DBH·H)',
+    'dbh'   : 'Model 1 - ln(AGB) = a + b*ln(DBH)',
+    'dbh_h' : 'Model 2 - ln(AGB) = a + b1*ln(DBH) + b2*ln(H)',
+    'dbh2h' : 'Model 3a - ln(AGB) = a + b*ln(DBH^2*H)',
+    'dbhh'  : 'Model 3b - ln(AGB) = a + b*ln(DBH*H)',
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 1: CLASSICAL OLS
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# BASELINE: CLASSICAL OLS
+# =============================================================================
 
 def run_ols(X, y, labels):
     """Fit OLS model and return result object with diagnostics."""
@@ -283,7 +285,7 @@ def run_ols(X, y, labels):
     resid  = model.resid
     n, p   = len(y), X.shape[1]
 
-    # AIC (manual — consistent with log-likelihood definition)
+    # AIC (manual - consistent with log-likelihood definition)
     aic = model.aic
 
     # RMSE on log scale
@@ -305,9 +307,9 @@ def run_ols(X, y, labels):
         'X'         : X,
     }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 2: BREUSCH-PAGAN TEST
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 1: BREUSCH-PAGAN TEST
+# =============================================================================
 
 def breusch_pagan_test(ols_result):
     """
@@ -325,19 +327,35 @@ def breusch_pagan_test(ols_result):
     print(f"\n  Breusch-Pagan Test:")
     print(f"    LM statistic : {lm_stat:.4f}")
     print(f"    p-value      : {lm_p:.4f}")
-    print(f"    Decision     : {'⚠ HETEROSCEDASTICITY DETECTED → WLS will be applied'
+    print(f"    Decision     : {'WARNING: HETEROSCEDASTICITY DETECTED -> WLS will be applied'
                                 if heteroscedastic
-                                else '✓ Homoscedasticity assumption not violated → OLS retained'}")
+                                else 'OK: Homoscedasticity assumption not violated -> OLS retained'}")
 
     return lm_stat, lm_p, heteroscedastic
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 3: WEIGHTED LEAST SQUARES (conditional)
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 2: WEIGHTED LEAST SQUARES (conditional)
+# =============================================================================
+
+def unweighted_r2(y, y_hat, p):
+    """
+    Coefficient of determination from unweighted log-scale residuals.
+    Used for WLS fits so that training R2 is directly comparable with
+    LOOCV-R2 (computed unweighted) and with OLS-fitted models.
+    p = number of model parameters, including the intercept.
+    """
+    y, y_hat = np.asarray(y), np.asarray(y_hat)
+    n = len(y)
+    ss_res = np.sum((y - y_hat) ** 2)
+    ss_tot = np.sum((y - y.mean()) ** 2)
+    r2 = 1 - ss_res / ss_tot
+    r2_adj = 1 - (1 - r2) * (n - 1) / (n - p)
+    return r2, r2_adj
+
 
 def run_wls(X, y, ols_result, labels, dbh_vals):
     """
-    WLS with inverse-square DBH weights: wᵢ = 1 / DBHᵢ²
+    WLS with inverse-square DBH weights: w_i = 1 / DBH_i^2
     Addresses residual heteroscedasticity associated with tree size
     using inverse-square DBH weights (Parresol, 1999).
     Only called when BP test is significant.
@@ -352,6 +370,10 @@ def run_wls(X, y, ols_result, labels, dbh_vals):
 
     rmse_log = np.sqrt(np.mean(resid**2))
 
+    # Training R2 from unweighted log-scale residuals, so that it is on the
+    # same scale as LOOCV-R2 and as R2 from OLS-fitted candidate models.
+    r2, r2_adj = unweighted_r2(y, y_hat, p)
+
     return {
         'model'     : model,
         'params'    : model.params,
@@ -359,8 +381,8 @@ def run_wls(X, y, ols_result, labels, dbh_vals):
         'y'         : y,
         'y_hat'     : y_hat,
         'resid'     : resid,
-        'r2'        : model.rsquared,
-        'r2_adj'    : model.rsquared_adj,
+        'r2'        : r2,
+        'r2_adj'    : r2_adj,
         'aic'       : model.aic,
         'rmse_log'  : rmse_log,
         'weights'   : weights,
@@ -369,19 +391,19 @@ def run_wls(X, y, ols_result, labels, dbh_vals):
         'X'         : X,
     }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 4: BOOTSTRAP (B = 5,000)
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 3: BOOTSTRAP (B = 5,000)
+# =============================================================================
 
 def bootstrap_model(X, y, B=B_BOOTSTRAP, use_wls=False,
                     dbh_vals=None, seed=RANDOM_SEED):
     """
     Non-parametric bootstrap resampling.
-    Returns 95% percentile CIs for all parameters and R².
+    Returns 95% percentile CIs for all parameters and R2.
 
-    B = 5,000 iterations — sufficient for stable percentile CIs
+    B = 5,000 iterations - sufficient for stable percentile CIs
     (Efron & Tibshirani, 1993; Davison & Hinkley, 1997).
-    WLS weights: wᵢ = 1/DBHᵢ² (Parresol, 1999).
+    WLS weights: w_i = 1/DBH_i^2 (Parresol, 1999).
     """
     rng    = np.random.default_rng(seed)
     n      = len(y)
@@ -400,7 +422,7 @@ def bootstrap_model(X, y, B=B_BOOTSTRAP, use_wls=False,
             else:
                 m  = OLS(yb, Xb).fit()
             params[b] = m.params
-            r2s[b]    = m.rsquared
+            r2s[b]    = unweighted_r2(yb, m.fittedvalues, Xb.shape[1])[0]
         except Exception:
             params[b] = np.nan
             r2s[b]    = np.nan
@@ -430,26 +452,26 @@ def print_bootstrap_results(boot, labels):
           f"valid = {boot['n_valid']:,}):")
     print(f"  {'Parameter':<25} {'Point Est':>10} {'95% CI Lower':>14} "
           f"{'95% CI Upper':>14}")
-    print(f"  {'─'*65}")
+    print(f"  {'-'*65}")
     # Note: point estimates printed separately from calling context
     for i, lbl in enumerate(labels):
         lo = boot['ci_params'][0, i]
         hi = boot['ci_params'][1, i]
         print(f"  {lbl:<25} {'[see OLS/WLS]':>10} {lo:>14.4f} {hi:>14.4f}")
 
-    print(f"\n  R² Bootstrap 95% CI: [{boot['ci_r2'][0]:.4f}, "
+    print(f"\n  R2 Bootstrap 95% CI: [{boot['ci_r2'][0]:.4f}, "
           f"{boot['ci_r2'][1]:.4f}]")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 5: LEAVE-ONE-OUT CROSS-VALIDATION
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 4: LEAVE-ONE-OUT CROSS-VALIDATION
+# =============================================================================
 
 def loocv(X, y, use_wls=False, dbh_vals=None):
     """
     LOOCV: fit model n times, each time predicting the left-out observation.
 
-    Returns LOOCV-R², LOOCV-RMSE, and the overfitting gap ΔR².
-    WLS weights: wᵢ = 1/DBHᵢ² (Parresol, 1999).
+    Returns LOOCV-R2, LOOCV-RMSE, and the overfitting gap dR2.
+    WLS weights: w_i = 1/DBH_i^2 (Parresol, 1999).
     """
     n          = len(y)
     y_pred_cv  = np.zeros(n)
@@ -483,9 +505,9 @@ def loocv(X, y, use_wls=False, dbh_vals=None):
 
     return loocv_r2, loocv_rmse, y_pred_cv
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 6: DUAN SMEARING FACTOR
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 5: DUAN SMEARING FACTOR
+# =============================================================================
 
 def duan_smearing_factor(resid):
     """
@@ -505,16 +527,16 @@ def back_transform(y_hat_log, sf):
 def compute_rmse_kg(y_kg_true, y_kg_pred):
     return np.sqrt(np.mean((y_kg_true - y_kg_pred) ** 2))
 
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 7: PREDICTION INTERVALS
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# STEP 6: PREDICTION INTERVALS
+# =============================================================================
 
 def prediction_intervals(fit_result, X_new, sf, ci_level=CI_LEVEL):
     """
     Compute 95% CI (mean prediction) and 95% PI (individual tree).
 
-    CI: ŷ₀ ± t · σ̂ · √(x₀ᵀ(XᵀX)⁻¹x₀)
-    PI: ŷ₀ ± t · σ̂ · √(1 + x₀ᵀ(XᵀX)⁻¹x₀)
+    CI: y0_hat +/- t * s * sqrt(x0' (X'X)^-1 x0)
+    PI: y0_hat +/- t * s * sqrt(1 + x0' (X'X)^-1 x0)
 
     Both intervals are back-transformed using the Duan SF. The interval
     calculation uses the common unweighted X'X approximation for both OLS and
@@ -553,14 +575,14 @@ def prediction_intervals(fit_result, X_new, sf, ci_level=CI_LEVEL):
         'pi_upper_kg'  : np.exp(pi_upper_log) * sf,
     }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # INFLUENCE DIAGNOSTICS 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def influence_diagnostics(fit_result):
     """
     Cook's Distance, leverage, standardised residuals.
-    Flagged observations are REPORTED ONLY — not removed.
+    Flagged observations are REPORTED ONLY - not removed.
     Data integrity principle: all decisions made prior to pipeline.
     """
     model  = fit_result['model']
@@ -605,7 +627,7 @@ def influence_diagnostics(fit_result):
 
     print(f"  NOTE: Flagged observations reported for interpretation in "
           f"Results section only.\n        No data modifications applied "
-          f"(data integrity principle — see accompanying documentation).")
+          f"(data integrity principle - see accompanying documentation).")
 
     return {
         'std_resid' : std_resid,
@@ -614,39 +636,40 @@ def influence_diagnostics(fit_result):
         'flagged'   : flagged,
     }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # FULL PIPELINE FOR ONE MODEL FORM
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def run_pipeline(df, model_form, cohort, has_height):
     """
-    Execute the full 7-step pipeline for one model form on one cohort.
+    Execute the baseline OLS fit and the six-step pipeline for one model
+    form on one cohort.
     Returns a results dictionary.
     """
-    print(f"\n{'═'*72}")
+    print(f"\n{'='*72}")
     print(f"  {MODEL_NAMES.get(model_form, model_form)}")
-    print(f"{'═'*72}")
+    print(f"{'='*72}")
 
     # Build model matrix
     X, y, labels = build_model_matrix(df, model_form, has_height)
     if X is None:
-        print(f"  ⚠ Skipped — height data not available for this model form.")
+        print(f"  WARNING: Skipped - height data not available for this model form.")
         return None
 
     n = len(y)
     if n < 5:
-        print(f"  ⚠ Skipped — insufficient observations (n={n})")
+        print(f"  WARNING: Skipped - insufficient observations (n={n})")
         return None
 
     y_kg = np.exp(y)   # original scale AGB
 
-    # ── STEP 1: OLS ─────────────────────────────────────────────────────────
-    print(f"\n  STEP 1: Classical OLS")
+    # --- BASELINE: OLS ---
+    print(f"\n  BASELINE: Classical OLS")
     ols = run_ols(X, y, labels)
 
     print(f"  {'Parameter':<25} {'Estimate':>12} {'Std Error':>12} "
           f"{'t-stat':>10} {'p-value':>10}")
-    print(f"  {'─'*70}")
+    print(f"  {'-'*70}")
     for i, lbl in enumerate(labels):
         p_val = ols['model'].pvalues[i]
         t_val = ols['model'].tvalues[i]
@@ -656,39 +679,39 @@ def run_pipeline(df, model_form, cohort, has_height):
         print(f"  {lbl:<25} {ols['params'][i]:>12.4f} {se:>12.4f} "
               f"{t_val:>10.3f} {p_val:>10.4f} {star}")
 
-    print(f"\n  R²={ols['r2']:.4f}  Adj.R²={ols['r2_adj']:.4f}  "
+    print(f"\n  R2={ols['r2']:.4f}  Adj.R2={ols['r2_adj']:.4f}  "
           f"AIC={ols['aic']:.3f}  RMSE(log)={ols['rmse_log']:.4f}")
 
     # Extract raw DBH values for WLS weights (Parresol, 1999)
     dbh_vals = df['dbh'].values
 
-    # ── STEP 2: BREUSCH-PAGAN ───────────────────────────────────────────────
-    print(f"\n  STEP 2: Breusch-Pagan Heteroscedasticity Test")
+    # --- STEP 1: BREUSCH-PAGAN ---
+    print(f"\n  STEP 1: Breusch-Pagan Heteroscedasticity Test")
     bp_stat, bp_p, heteroscedastic = breusch_pagan_test(ols)
 
-    # ── STEP 3: WLS (conditional) ───────────────────────────────────────────
+    # --- STEP 2: WLS (conditional) ---
     if heteroscedastic:
-        print(f"\n  STEP 3: Weighted Least Squares (BP p={bp_p:.4f} < {ALPHA})")
+        print(f"\n  STEP 2: Weighted Least Squares (BP p={bp_p:.4f} < {ALPHA})")
         wls = run_wls(X, y, ols, labels, dbh_vals)
         final = wls
         estimator = 'WLS'
 
         print(f"  {'Parameter':<25} {'Estimate':>12} {'Std Error':>12}")
-        print(f"  {'─'*52}")
+        print(f"  {'-'*52}")
         for i, lbl in enumerate(labels):
             se = wls['model'].bse[i]
             print(f"  {lbl:<25} {wls['params'][i]:>12.4f} {se:>12.4f}")
 
-        print(f"\n  WLS: R²={wls['r2']:.4f}  Adj.R²={wls['r2_adj']:.4f}  "
+        print(f"\n  WLS: R2={wls['r2']:.4f}  Adj.R2={wls['r2_adj']:.4f}  "
               f"AIC={wls['aic']:.3f}  RMSE(log)={wls['rmse_log']:.4f}")
     else:
-        print(f"\n  STEP 3: WLS not required (BP p={bp_p:.4f} ≥ {ALPHA})")
+        print(f"\n  STEP 2: WLS not required (BP p={bp_p:.4f} >= {ALPHA})")
         wls = None
         final = ols
         estimator = 'OLS'
 
-    # ── STEP 4: BOOTSTRAP ───────────────────────────────────────────────────
-    print(f"\n  STEP 4: Bootstrap (B = {B_BOOTSTRAP:,})")
+    # --- STEP 3: BOOTSTRAP ---
+    print(f"\n  STEP 3: Bootstrap (B = {B_BOOTSTRAP:,})")
     boot = bootstrap_model(
         X, y, B=B_BOOTSTRAP,
         use_wls=heteroscedastic,
@@ -699,7 +722,7 @@ def run_pipeline(df, model_form, cohort, has_height):
     # Print point estimates alongside bootstrap CIs
     print(f"\n  Point estimates vs bootstrap CIs:")
     print(f"  {'Parameter':<25} {'Point Est':>12} {'95% CI':>22}")
-    print(f"  {'─'*62}")
+    print(f"  {'-'*62}")
     for i, lbl in enumerate(labels):
         lo = boot['ci_params'][0, i]
         hi = boot['ci_params'][1, i]
@@ -707,25 +730,25 @@ def run_pipeline(df, model_form, cohort, has_height):
               f"  [{lo:.4f}, {hi:.4f}]")
 
     r2_pt = final['r2']
-    print(f"  {'R²':<25} {r2_pt:>12.4f}   "
+    print(f"  {'R2':<25} {r2_pt:>12.4f}   "
           f"[{boot['ci_r2'][0]:.4f}, {boot['ci_r2'][1]:.4f}]")
 
-    # ── STEP 5: LOOCV ───────────────────────────────────────────────────────
-    print(f"\n  STEP 5: Leave-One-Out Cross-Validation")
+    # --- STEP 4: LOOCV ---
+    print(f"\n  STEP 4: Leave-One-Out Cross-Validation")
     loocv_r2, loocv_rmse, y_cv = loocv(
         X, y,
         use_wls=heteroscedastic,
         dbh_vals=dbh_vals
     )
     delta_r2 = final['r2'] - loocv_r2
-    print(f"  Training R²    : {final['r2']:.4f}")
-    print(f"  LOOCV-R²       : {loocv_r2:.4f}")
-    print(f"  Overfitting ΔR²: {delta_r2:.4f} "
-          f"({'⚠ substantial' if delta_r2>0.15 else '✓ acceptable'})")
+    print(f"  Training R2    : {final['r2']:.4f}")
+    print(f"  LOOCV-R2       : {loocv_r2:.4f}")
+    print(f"  Overfit gap dR2: {delta_r2:.4f} "
+          f"({'WARNING: substantial' if delta_r2>0.15 else 'OK: acceptable'})")
     print(f"  LOOCV-RMSE     : {loocv_rmse:.4f} (log scale)")
 
-    # ── STEP 6: DUAN SMEARING FACTOR ────────────────────────────────────────
-    print(f"\n  STEP 6: Duan Smearing Factor")
+    # --- STEP 5: DUAN SMEARING FACTOR ---
+    print(f"\n  STEP 5: Duan Smearing Factor")
     sf = duan_smearing_factor(final['resid'])
     y_kg_pred = back_transform(final['y_hat'], sf)
     rmse_kg   = compute_rmse_kg(y_kg, y_kg_pred)
@@ -733,14 +756,14 @@ def run_pipeline(df, model_form, cohort, has_height):
     print(f"  Smearing Factor (SF) : {sf:.6f}")
     print(f"  RMSE (kg dry weight) : {rmse_kg:.4f} kg")
 
-    # ── STEP 7: PREDICTION INTERVALS ────────────────────────────────────────
-    print(f"\n  STEP 7: Prediction Intervals")
+    # --- STEP 6: PREDICTION INTERVALS ---
+    print(f"\n  STEP 6: Prediction Intervals")
 
-    # At mean DBH
+    # At dataset means (mean DBH, plus mean height for height-based forms)
     dbh_mean  = df['dbh'].mean()
     dbh_range = np.linspace(df['dbh'].min(), df['dbh'].max(), 100)
 
-    # Build X_new for mean DBH
+    # Build X_new at the dataset means
     def make_x_new(dbh_val, h_val=None):
         if model_form == 'dbh':
             return np.array([[1, np.log(dbh_val)]])
@@ -757,7 +780,10 @@ def run_pipeline(df, model_form, cohort, has_height):
 
     if x_mean is not None:
         pi_mean = prediction_intervals(final, x_mean, sf)
-        print(f"  At mean DBH = {dbh_mean:.2f} cm:")
+        if model_form == 'dbh':
+            print(f"  At mean DBH = {dbh_mean:.2f} cm:")
+        else:
+            print(f"  At mean DBH = {dbh_mean:.2f} cm and mean H = {h_mean:.2f} m:")
         print(f"    Point prediction : {pi_mean['y_hat_kg'][0]:.3f} kg")
         print(f"    95% CI           : [{pi_mean['ci_lower_kg'][0]:.3f}, "
               f"{pi_mean['ci_upper_kg'][0]:.3f}] kg")
@@ -781,10 +807,10 @@ def run_pipeline(df, model_form, cohort, has_height):
 
     pi_curve = prediction_intervals(final, X_range, sf) if X_range is not None else None
 
-    # ── INFLUENCE DIAGNOSTICS ───────────────────────────────────────────────
+    # --- INFLUENCE DIAGNOSTICS ---
     influence = influence_diagnostics(final)
 
-    # ── RETURN ALL RESULTS ──────────────────────────────────────────────────
+    # --- RETURN ALL RESULTS ---
     return {
         'model_form'        : model_form,
         'cohort'            : cohort,
@@ -808,6 +834,7 @@ def run_pipeline(df, model_form, cohort, has_height):
         'y_kg_pred'         : y_kg_pred,
         'pi_at_mean'        : pi_mean if x_mean is not None else None,
         'dbh_mean'          : dbh_mean,
+        'h_mean'            : h_mean if model_form != 'dbh' else None,
         'dbh_range'         : dbh_range,
         'pi_curve'          : pi_curve,
         'influence'         : influence,
@@ -818,19 +845,20 @@ def run_pipeline(df, model_form, cohort, has_height):
                                if (model_form == 'dbh_h'
                                and len(final['model'].pvalues) > 2)
                                else None),
-        # CI width of β₁ — narrower = more precise = better for MRV
+        # CI width of beta1 - narrower = more precise = better for MRV
         'ci_width'          : float(boot['ci_params'][1, 1]
                                - boot['ci_params'][0, 1]),
     }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # MODEL SELECTION SUMMARY
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def rank_eligible_models(results_list):
     """
     Rank eligible candidate equations across five equally weighted criteria:
-    LOOCV-R² ↑, ΔR² ↓, AIC ↓, RMSE(kg) ↓, and bootstrap CI width ↓.
+    LOOCV-R2 (higher), dR2 (lower), AIC (lower), RMSE(kg) (lower),
+    and bootstrap CI width (lower).
 
     The function returns the full ranked table and the top-ranked eligible
     candidate. The pipeline does not designate a final retained equation;
@@ -856,7 +884,7 @@ def rank_eligible_models(results_list):
         for r in valid:
             if r not in eligible:
                 pv = r.get('beta2_pval', None)
-                print(f'  NOTE: M2 excluded — beta2 p={pv:.4f} >= 0.05')
+                print(f'  NOTE: M2 excluded - beta2 p={pv:.4f} >= 0.05')
 
     df_sel = pd.DataFrame([{
         'model_form'  : r['model_form'],
@@ -878,11 +906,11 @@ def rank_eligible_models(results_list):
     # Each eligible model receives a rank for each criterion; the lowest
     # summed composite score indicates the highest statistical support.
     # CI width rewards MRV-relevant parameter precision:
-    #   LOOCV-R²  ↑  (ascending=False)
-    #   ΔR²       ↓  (ascending=True)  — overfitting gap
-    #   AIC       ↓  (ascending=True)
-    #   RMSE(kg)  ↓  (ascending=True)  — original-scale prediction error
-    #   CI width  ↓  (ascending=True)  — parameter precision (MRV alignment)
+    #   LOOCV-R2  higher is better (ascending=False)
+    #   dR2       lower is better  (ascending=True)  - overfitting gap
+    #   AIC       lower is better  (ascending=True)
+    #   RMSE(kg)  lower is better  (ascending=True)  - original-scale prediction error
+    #   CI width  lower is better  (ascending=True)  - parameter precision (MRV alignment)
     df_sel['loocv_rank']    = df_sel['loocv_r2'].rank(ascending=False)
     df_sel['delta_r2_rank'] = df_sel['delta_r2'].rank(ascending=True)
     df_sel['aic_rank']      = df_sel['aic'].rank(ascending=True)
@@ -902,7 +930,7 @@ def rank_eligible_models(results_list):
     return df_sel, top_ranked_result
 
 def print_model_comparison(df_sel, cohort):
-    subsection(f"MODEL COMPARISON TABLE — {cohort}-YEAR COHORT")
+    subsection(f"MODEL COMPARISON TABLE - {cohort}-YEAR COHORT")
     # Performance metrics
     cols = ['model_form','estimator','n','r2','r2_adj','aic',
             'loocv_r2','delta_r2','rmse_kg','sf','bp_p']
@@ -917,13 +945,13 @@ def print_model_comparison(df_sel, cohort):
           float_format=lambda x: f"{x:.0f}"))
     print(f"\n  Eligible models ranked from highest to lowest statistical support")
     print(f"  using five equally weighted criteria.")
-    print(f"  Review equation form, β₁ and its bootstrap 95% CI for biological")
+    print(f"  Review equation form, beta1 and its bootstrap 95% CI for biological")
     print(f"  plausibility before retaining a final equation.")
     print(f"  Rank 1 is the top-ranked eligible equation; it is not an automatic")
     print(f"  final recommendation.")
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # VISUALISATION
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def plot_cohort(cohort_results, top_ranked_result, cohort):
     """
@@ -932,7 +960,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     r   = top_ranked_result
     fig = plt.figure(figsize=(18, 14))
     fig.suptitle(
-        f"Allometric Model Diagnostics — {cohort}-Year Cohort\n"
+        f"Allometric Model Diagnostics - {cohort}-Year Cohort\n"
         f"{MODEL_NAMES.get(r['model_form'], r['model_form'])} "
         f"[{r['estimator']}] | n={r['n']}",
         fontsize=14, fontweight='bold', y=0.98
@@ -945,7 +973,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     y_kg   = r['y_kg']
     y_pred = r['y_kg_pred']
 
-    # Panel 1 — Log-log scatter with regression line
+    # Panel 1 - Log-log scatter with regression line
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.scatter(r['X'][:, 1], y, color=COLOURS['scatter'],
                 edgecolors='white', zorder=3, s=60, label='Observed')
@@ -966,7 +994,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax1.legend(fontsize=8)
     ax1.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 2 — Observed vs Predicted (kg scale)
+    # Panel 2 - Observed vs Predicted (kg scale)
     ax2 = fig.add_subplot(gs[0, 1])
     ax2.scatter(y_kg, y_pred, color=COLOURS['ci'],
                 edgecolors='white', zorder=3, s=60)
@@ -980,7 +1008,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax2.legend(fontsize=8)
     ax2.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 3 — Prediction intervals across DBH range
+    # Panel 3 - Prediction intervals across DBH range
     ax3 = fig.add_subplot(gs[0, 2])
     if r['pi_curve'] is not None:
         dbh_r = r['dbh_range']
@@ -1001,7 +1029,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax3.legend(fontsize=7)
     ax3.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 4 — Residuals vs Fitted
+    # Panel 4 - Residuals vs Fitted
     ax4 = fig.add_subplot(gs[1, 0])
     ax4.scatter(y_hat, resid, color=COLOURS['residual'],
                 edgecolors='white', zorder=3, s=60)
@@ -1011,7 +1039,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax4.set_title('Residuals vs Fitted', fontsize=10)
     ax4.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 5 — Q-Q plot
+    # Panel 5 - Q-Q plot
     ax5 = fig.add_subplot(gs[1, 1])
     (osm, osr), (slope, intercept, _) = stats.probplot(resid, dist='norm')
     ax5.scatter(osm, osr, color=COLOURS['residual'],
@@ -1026,7 +1054,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
                   fontsize=10)
     ax5.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 6 — Residual histogram
+    # Panel 6 - Residual histogram
     ax6 = fig.add_subplot(gs[1, 2])
     ax6.hist(resid, bins=min(10, r['n']//2 + 1),
              color=COLOURS['residual'], edgecolor='white', alpha=0.8)
@@ -1040,7 +1068,7 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax6.set_title('Residual Distribution', fontsize=10)
     ax6.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 7 — Bootstrap distribution of β₁
+    # Panel 7 - Bootstrap distribution of beta1
     ax7 = fig.add_subplot(gs[2, 0])
     boot_b1 = r['bootstrap']['params_dist'][:, 1]
     ax7.hist(boot_b1, bins=50, color=COLOURS['bootstrap'],
@@ -1052,13 +1080,15 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax7.axvline(ci_lo, color='red', lw=1.5, linestyle='--',
                 label=f'95% CI [{ci_lo:.3f}, {ci_hi:.3f}]')
     ax7.axvline(ci_hi, color='red', lw=1.5, linestyle='--')
-    ax7.set_xlabel('β₁ (allometric exponent)', fontsize=9)
+    b1_desc = ('DBH coefficient' if r['model_form'] == 'dbh_h'
+               else 'allometric exponent')
+    ax7.set_xlabel(rf'$\beta_1$ ({b1_desc})', fontsize=9)
     ax7.set_ylabel('Frequency', fontsize=9)
-    ax7.set_title(f'Bootstrap Distribution of β₁\n(B={B_BOOTSTRAP:,})', fontsize=10)
+    ax7.set_title(f'Bootstrap Distribution of $\\beta_1$\n(B={B_BOOTSTRAP:,})', fontsize=10)
     ax7.legend(fontsize=7)
     ax7.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 8 — LOOCV: predicted vs observed
+    # Panel 8 - LOOCV: predicted vs observed
     ax8 = fig.add_subplot(gs[2, 1])
     valid_mask = ~np.isnan(r['loocv_predictions'])
     y_cv_valid = r['loocv_predictions'][valid_mask]
@@ -1070,11 +1100,11 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     ax8.plot(lim2, lim2, 'k--', lw=1, alpha=0.7)
     ax8.set_xlabel('Observed ln(AGB)', fontsize=9)
     ax8.set_ylabel('LOOCV Predicted ln(AGB)', fontsize=9)
-    ax8.set_title(f'LOOCV Validation\n(R²={r["loocv_r2"]:.4f}, '
-                  f'ΔR²={r["delta_r2"]:.4f})', fontsize=10)
+    ax8.set_title(f'LOOCV Validation\n($R^2$={r["loocv_r2"]:.4f}, '
+                  f'$\\Delta R^2$={r["delta_r2"]:.4f})', fontsize=10)
     ax8.grid(True, color=COLOURS['grid'], alpha=0.8)
 
-    # Panel 9 — Cook's Distance
+    # Panel 9 - Cook's Distance
     ax9 = fig.add_subplot(gs[2, 2])
     cooks = r['influence']['cooks_d']
     ax9.bar(range(1, r['n']+1), cooks,
@@ -1094,9 +1124,9 @@ def plot_cohort(cohort_results, top_ranked_result, cohort):
     plt.close()
     print(f"\n  Figure saved: {fname}")
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # RESULTS EXPORT TO EXCEL
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def export_results(all_results, df_original):
     """Export comprehensive results to Excel workbook."""
@@ -1104,7 +1134,7 @@ def export_results(all_results, df_original):
 
     with pd.ExcelWriter(fname, engine='openpyxl') as writer:
 
-        # Sheet 1 — Summary table across all cohorts and models
+        # Sheet 1 - Summary table across all cohorts and models
         summary_rows = []
         for cohort, results_list in all_results.items():
             for r in results_list:
@@ -1115,13 +1145,13 @@ def export_results(all_results, df_original):
                     'Model Form'        : MODEL_NAMES.get(r['model_form'], ''),
                     'Estimator'         : r['estimator'],
                     'n'                 : r['n'],
-                    'R²'                : round(r['final']['r2'], 4),
-                    'Adj R²'            : round(r['final']['r2_adj'], 4),
+                    'R2'                : round(r['final']['r2'], 4),
+                    'Adj R2'            : round(r['final']['r2_adj'], 4),
                     'AIC'               : round(r['final']['aic'], 3),
                     'RMSE (log)'        : round(r['final']['rmse_log'], 4),
-                    'LOOCV R²'          : round(r['loocv_r2'], 4),
+                    'LOOCV R2'          : round(r['loocv_r2'], 4),
                     'LOOCV RMSE (log)'  : round(r['loocv_rmse'], 4),
-                    'ΔR² (overfit)'     : round(r['delta_r2'], 4),
+                    'Delta R2 (overfit)'     : round(r['delta_r2'], 4),
                     'RMSE (kg)'         : round(r['rmse_kg'], 4),
                     'Smearing Factor'   : round(r['sf'], 6),
                     'BP p-value'        : round(r['bp_p'], 4),
@@ -1134,14 +1164,14 @@ def export_results(all_results, df_original):
                         round(r['bootstrap']['ci_params'][0, i], 4)
                     row[f'Bootstrap CI upper: {lbl}'] = \
                         round(r['bootstrap']['ci_params'][1, i], 4)
-                row['Bootstrap R² CI lower'] = round(r['bootstrap']['ci_r2'][0], 4)
-                row['Bootstrap R² CI upper'] = round(r['bootstrap']['ci_r2'][1], 4)
+                row['Bootstrap R2 CI lower'] = round(r['bootstrap']['ci_r2'][0], 4)
+                row['Bootstrap R2 CI upper'] = round(r['bootstrap']['ci_r2'][1], 4)
                 summary_rows.append(row)
 
         pd.DataFrame(summary_rows).to_excel(
             writer, sheet_name='Summary', index=False)
 
-        # Sheet 2 — Raw data with predictions from top-ranked eligible model
+        # Sheet 2 - Raw data with predictions from top-ranked eligible model
         pred_rows = []
         for cohort, results_list in all_results.items():
             # Use the top-ranked eligible equation (Rank 1 per composite ranking).
@@ -1167,7 +1197,8 @@ def export_results(all_results, df_original):
             pd.concat(pred_rows).to_excel(
                 writer, sheet_name='Predictions', index=False)
 
-        # Sheet 3 — Prediction intervals at mean DBH
+        # Sheet 3 - Prediction intervals at dataset means
+        #   (mean DBH, and mean height for height-based model forms)
         pi_rows = []
         for cohort, results_list in all_results.items():
             for r in results_list:
@@ -1177,7 +1208,10 @@ def export_results(all_results, df_original):
                 pi_rows.append({
                     'Cohort'        : cohort,
                     'Model Form'    : r['model_form'],
-                    'DBH (cm)'      : round(r['dbh_mean'], 2),
+                    'Mean DBH (cm)' : round(r['dbh_mean'], 2),
+                    'Mean H (m)'    : (round(r['h_mean'], 2)
+                                       if r.get('h_mean') is not None
+                                       else None),
                     'Predicted AGB (kg)' : round(pi['y_hat_kg'][0], 3),
                     '95% CI lower (kg)' : round(pi['ci_lower_kg'][0], 3),
                     '95% CI upper (kg)' : round(pi['ci_upper_kg'][0], 3),
@@ -1187,11 +1221,11 @@ def export_results(all_results, df_original):
         pd.DataFrame(pi_rows).to_excel(
             writer, sheet_name='Prediction Intervals', index=False)
 
-    print(f"\n  ✓ Results exported to: {fname}")
+    print(f"\n  OK: Results exported to: {fname}")
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # MAIN EXECUTION
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 def main():
     np.random.seed(RANDOM_SEED)
@@ -1199,7 +1233,7 @@ def main():
 
     print(sep())
     print("  UNCERTAINTY-AWARE ALLOMETRIC MODELLING PIPELINE")
-    print("  Seven-Step Integrated Analytical Pipeline")
+    print("  Six-Step Integrated Analytical Pipeline")
     print(sep())
 
     # Load data
@@ -1216,7 +1250,7 @@ def main():
         model_forms = ['dbh', 'dbh_h', 'dbh2h', 'dbhh']
     else:
         model_forms = ['dbh']
-        print("  ⚠ Height not available — only Model 1 (DBH only) will be tested.")
+        print("  WARNING: Height not available - only Model 1 (DBH only) will be tested.")
 
     all_results = {}
 
@@ -1228,7 +1262,7 @@ def main():
         n = len(cohort_df)
 
         if n < 5:
-            print(f"  ⚠ Only {n} observations — cohort skipped.")
+            print(f"  WARNING: Only {n} observations - cohort skipped.")
             continue
 
         print(f"\n  n = {n} trees")
@@ -1255,7 +1289,7 @@ def main():
 
     # Cross-cohort comparison
     if len(all_results) > 1:
-        section("CROSS-COHORT COMPARISON — TOP-RANKED ELIGIBLE EQUATIONS")
+        section("CROSS-COHORT COMPARISON - TOP-RANKED ELIGIBLE EQUATIONS")
         comp_rows = []
         for cohort, rlist in all_results.items():
             # Use the top-ranked eligible equation per cohort.
@@ -1269,11 +1303,11 @@ def main():
                     'Cohort'          : f"{cohort}-year",
                     'Model'           : r['model_form'],
                     'n'               : r['n'],
-                    'β₀'              : round(r['final']['params'][0], 4),
-                    'β₁'              : round(r['final']['params'][1], 4),
-                    'R²'              : round(r['final']['r2'], 4),
-                    'LOOCV-R²'        : round(r['loocv_r2'], 4),
-                    'ΔR²'             : round(r['delta_r2'], 4),
+                    'beta0'              : round(r['final']['params'][0], 4),
+                    'beta1'              : round(r['final']['params'][1], 4),
+                    'R2'              : round(r['final']['r2'], 4),
+                    'LOOCV-R2'        : round(r['loocv_r2'], 4),
+                    'Delta R2'        : round(r['delta_r2'], 4),
                     'RMSE (kg)'       : round(r['rmse_kg'], 4),
                     'SF'              : round(r['sf'], 6),
                     'Estimator'       : r['estimator'],
@@ -1294,7 +1328,7 @@ def main():
         print(f"    - {f}")
     print(f"\n{sep()}\n")
 
-# ══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 if __name__ == "__main__":
     main()
